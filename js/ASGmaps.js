@@ -1,4 +1,4 @@
-/* ASGmaps 1.0 | MIT License */
+/* ASGmaps 1.1 | MIT License */
 
 /* GMAPS LOADER */
 window.ASGmaps_Gmaps_Load = function()
@@ -36,6 +36,7 @@ ASGmaps_Factory.prototype = {
     geocoder: null,
     map_class_selector: 'map',
     maps: [],
+    resizeListener: null,
     
     loadGmaps: function()
     {
@@ -60,6 +61,19 @@ ASGmaps_Factory.prototype = {
                     this.addMap(mapElements[i_mapElements], i_mapElements);
                     
                 }
+                
+                var factory = this;
+                this.resizeListener = google.maps.event.addDomListener(window, 'resize', function(){
+                    var l = factory.maps.length;
+                    if (l>0)
+                    {
+                        var i;
+                        for (i=0; i<l; ++i)
+                        {
+                            factory.maps[i].resize();
+                        }
+                    }
+                });
             }
 
             return true;
@@ -89,6 +103,35 @@ ASGmaps_Factory.prototype = {
                 console.log(debug_message);
             }
         }
+    },
+    
+    ajaxCall: function(url, callbackDone, callbackError)
+    {
+        var xmlhttp = window.XMLHttpRequest ? new XMLHttpRequest() : new ActiveXObject("Microsoft.XMLHTTP");
+        
+        xmlhttp.onreadystatechange = function()
+        {
+            if (xmlhttp.readyState === 4)
+            {
+                if(xmlhttp.status === 200)
+                {
+                    if (typeof callbackDone === 'function')
+                    {
+                        callbackDone(xmlhttp.responseText);
+                    }
+                }
+                else
+                {
+                    if (typeof callbackError === 'function')
+                    {
+                        callbackError();
+                    }
+                }
+            }
+        };
+        
+        xmlhttp.open('GET', url, true);
+        xmlhttp.send();
     },
     
     isJSON: function(str)
@@ -171,8 +214,8 @@ ASGmaps_Map.prototype = {
         var options = window.ASGmaps.mergeObjects(this.getDefaultOptions(), this.options);
         this.map = new google.maps.Map(this.element, this.sanitizeGmapOptions(options));
         this.bounds = new google.maps.LatLngBounds();
-        this.error = (this.putDefaultCenter() || this.putDefaultAddress());
-        if (this.error)
+        this.error = !(this.putDefaultCenter() || this.putDefaultAddress());
+        if (!this.error)
         {
             this.putDefaultZoom();
             var icon = this.getElementData('icon');
@@ -183,7 +226,14 @@ ASGmaps_Map.prototype = {
             this.fitMarkers = Boolean(this.getElementData('fitMarkers'));
             this.putDefaultMarkers();
         }
-        return this.error;
+        return !this.error;
+    },
+    
+    resize: function()
+    {
+        var center = this.map.getCenter();
+        google.maps.event.trigger(this.map, 'resize');
+        this.map.setCenter(center);
     },
     
     getDefaultGmapOptions: function()
@@ -426,8 +476,32 @@ ASGmaps_Marker.prototype = {
                 google.maps.event.addListener(this.overlay, 'click', function(){
                     infoWindow.open(map, overlay);
                 });
+                return true;
             }
         }
+        return false;
+    },
+    initInfoWindowAjax: function()
+    {
+        if (typeof this.data.infoWindowAjax !== 'undefined')
+        {
+            var infoWindowAjax = window.ASGmaps.decodeHtmlEntity(this.data.infoWindowAjax);
+            if (infoWindowAjax !== '')
+            {
+                var map = this.asgmap.map;
+                var overlay = this.overlay;
+                google.maps.event.addListener(this.overlay, 'click', function(){
+                    window.ASGmaps.ajaxCall(infoWindowAjax, function(response){
+                        var infoWindow = new google.maps.InfoWindow({
+                            content: response
+                        });
+                        infoWindow.open(map, overlay);
+                    });
+                });
+                return true;
+            }
+        }
+        return false;
     },
     initButton: function()
     {
@@ -439,8 +513,10 @@ ASGmaps_Marker.prototype = {
                 google.maps.event.addListener(this.overlay, 'click', function(){
                     window.location.href = url;
                 });
+                return true;
             }
         }
+        return false;
     },
     
     showMarker: function()
@@ -455,8 +531,7 @@ ASGmaps_Marker.prototype = {
             this.asgmap.bounds.extend(this.latlng);
             this.asgmap.map.fitBounds(this.asgmap.bounds);
         }
-        this.initInfoWindow();
-        this.initButton();
+        (this.initInfoWindowAjax() || this.initInfoWindow() || this.initButton());
     }
 }
 

@@ -1,0 +1,12 @@
+
+
+
+.map {
+    margin:20px auto;
+    border:1px solid #000;
+    max-width:640px;
+    height:400px;
+    
+    background:#f00 none;
+}
+
